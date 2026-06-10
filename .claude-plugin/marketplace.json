@@ -1,0 +1,27 @@
+{
+  "name": "codecraftersautomation",
+  "owner": {
+    "name": "CodeCrafters Automation OU"
+  },
+  "description": "CodeCrafters Automation — Claude Code plugins.",
+  "version": "0.1.0",
+  "plugins": [
+    {
+      "name": "ccp",
+      "displayName": "Change Claude Profile",
+      "source": "./plugins/ccp",
+      "description": "Change Claude Profile — handoff, takeover, and plugin synchronization between Claude Code profiles (claude-team <-> claude-max). Never copies credentials, OAuth tokens, or plugin cache.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Jairo Escobar"
+      },
+      "category": "workflow",
+      "keywords": [
+        "profile",
+        "handoff",
+        "takeover",
+        "plugin-sync"
+      ]
+    }
+  ]
+}

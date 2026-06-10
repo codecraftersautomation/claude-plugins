@@ -1,0 +1,174 @@
+#!/usr/bin/env bash
+# git-safety-check.sh
+#
+# Inspect the working tree for conditions that make a handoff or takeover risky,
+# and write a markdown report. This is read-only: it never stages, commits, or
+# modifies anything. The point is to surface "you probably want to look at this
+# before switching profiles" — uncommitted work, conflicts, stray secrets, big
+# binaries that shouldn't be in a diff, etc.
+#
+# Writes: .claude/ccp/handoff/SAFETY_CHECK.md
+# Exit code is always 0 (a "finding" is information, not a script failure), so
+# callers can rely on the report rather than parsing exit status.
+
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REDACT="$SCRIPT_DIR/redact-sensitive-output.sh"
+redact() { if [[ -x "$REDACT" ]]; then "$REDACT"; else cat; fi; }
+
+OUT_DIR=".claude/ccp/handoff"
+mkdir -p "$OUT_DIR"
+REPORT="$OUT_DIR/SAFETY_CHECK.md"
+
+# Large file threshold in bytes (1 MB).
+LARGE_FILE_BYTES=$((1024 * 1024))
+
+# Filenames/paths that commonly hold secrets and should never be in a diff.
+SECRET_NAME_REGEX='(^|/)(\.env(\..*)?|\.npmrc|\.netrc|id_rsa|id_ed25519|id_dsa|.*\.pem|.*\.p12|.*\.pfx|.*\.key|credentials|\.credentials\.json|\.aws/credentials|\.claude\.json)$'
+
+is_git="no"
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  is_git="yes"
+fi
+
+{
+  echo "# SAFETY CHECK"
+  echo
+  echo "_Read-only pre-handoff / pre-takeover safety report from CCP._"
+  echo
+
+  if [[ "$is_git" != "yes" ]]; then
+    echo "## Not a git repository"
+    echo
+    echo "- Working directory: \`$(pwd)\`"
+    echo "- CCP can still produce handoff prose, but there is no diff or branch to reason about."
+    echo "- Consider \`git init\` if you want change tracking across the handoff."
+    exit 0
+  fi
+
+  branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '(detached)')"
+  echo "## Repository overview"
+  echo
+  echo "- Working directory: \`$(pwd)\`"
+  echo "- Current branch: \`$branch\`"
+  echo
+
+  # Staged
+  staged="$(git diff --cached --name-only 2>/dev/null)"
+  echo "## Staged changes"
+  echo
+  if [[ -n "$staged" ]]; then
+    echo '```'
+    echo "$staged"
+    echo '```'
+  else
+    echo "- None."
+  fi
+  echo
+
+  # Unstaged (modified tracked)
+  unstaged="$(git diff --name-only 2>/dev/null)"
+  echo "## Unstaged (modified, tracked) changes"
+  echo
+  if [[ -n "$unstaged" ]]; then
+    echo '```'
+    echo "$unstaged"
+    echo '```'
+  else
+    echo "- None."
+  fi
+  echo
+
+  # Untracked
+  untracked="$(git ls-files --others --exclude-standard 2>/dev/null)"
+  echo "## Untracked files"
+  echo
+  if [[ -n "$untracked" ]]; then
+    echo '```'
+    echo "$untracked"
+    echo '```'
+  else
+    echo "- None."
+  fi
+  echo
+
+  # Deleted
+  deleted="$(git ls-files --deleted 2>/dev/null)"
+  echo "## Deleted (tracked but missing) files"
+  echo
+  if [[ -n "$deleted" ]]; then
+    echo '```'
+    echo "$deleted"
+    echo '```'
+  else
+    echo "- None."
+  fi
+  echo
+
+  # Merge conflicts
+  conflicts="$(git diff --name-only --diff-filter=U 2>/dev/null)"
+  echo "## Merge conflicts"
+  echo
+  if [[ -n "$conflicts" ]]; then
+    echo "**Unresolved conflicts present — resolve before handing off.**"
+    echo '```'
+    echo "$conflicts"
+    echo '```'
+  else
+    echo "- None."
+  fi
+  echo
+
+  # Large files among changed + untracked
+  echo "## Large files (> 1 MB) in pending changes"
+  echo
+  large_found=0
+  candidates="$(printf '%s\n%s\n%s\n' "$staged" "$unstaged" "$untracked" | sort -u | sed '/^$/d')"
+  while IFS= read -r f; do
+    [[ -z "$f" ]] && continue
+    if [[ -f "$f" ]]; then
+      size=$(stat -f%z "$f" 2>/dev/null || echo 0)
+      if [[ "$size" -gt "$LARGE_FILE_BYTES" ]]; then
+        echo "- \`$f\` ($((size / 1024)) KB)"
+        large_found=1
+      fi
+    fi
+  done <<< "$candidates"
+  [[ "$large_found" -eq 0 ]] && echo "- None."
+  echo
+
+  # Likely secret files by name
+  echo "## Likely secret files in pending changes"
+  echo
+  secret_files_found=0
+  while IFS= read -r f; do
+    [[ -z "$f" ]] && continue
+    if echo "$f" | grep -Eiq "$SECRET_NAME_REGEX"; then
+      echo "- \`$f\` — name matches a common secret pattern. Do NOT include in a shared diff."
+      secret_files_found=1
+    fi
+  done <<< "$candidates"
+  [[ "$secret_files_found" -eq 0 ]] && echo "- None detected by name."
+  echo
+
+  # Likely secrets inside the diff (we look at the redactor's hits)
+  echo "## Likely secrets inside the diff"
+  echo
+  diff_raw="$( { git diff 2>/dev/null; git diff --cached 2>/dev/null; } )"
+  diff_redacted="$(printf '%s' "$diff_raw" | redact)"
+  redaction_hits="$(printf '%s' "$diff_redacted" | grep -c 'REDACTED' || true)"
+  if [[ "${redaction_hits:-0}" -gt 0 ]]; then
+    echo "- The redactor flagged **$redaction_hits** likely secret occurrence(s) in the diff."
+    echo "- Review before sharing. CCP-generated artifacts store the redacted form."
+  else
+    echo "- None flagged by the conservative redactor."
+  fi
+  echo
+
+  echo "---"
+  echo "_Generated by \`git-safety-check.sh\`. This report is informational and read-only._"
+} | tee "$REPORT" >/dev/null
+
+echo "Wrote safety report to $REPORT"
+exit 0

@@ -1,0 +1,10 @@
+# CCP (and any plugin) runtime-generated state — never commit.
+# These directories hold handoff notes, workstate dumps, diffs, plugin
+# inventories, and the profile-doctor report. They can contain machine-local
+# paths and (despite redaction) should not be published.
+.claude/ccp/
+
+# Generic local Claude Code state, OS cruft, editor files.
+.DS_Store
+*.swp
+*~

@@ -1,0 +1,23 @@
+{
+  "ccp_lock_version": 1,
+  "note": "Desired plugin set for this repo. Best-effort; verify before applying. Contains no secrets, no OAuth tokens, no cache paths.",
+  "plugins": [
+    {
+      "name": "example-plugin",
+      "marketplace": "example-marketplace",
+      "version": "unknown",
+      "scope": "project",
+      "enabled": true,
+      "source_profile": "team",
+      "components": {
+        "skills": "unknown",
+        "agents": "unknown",
+        "hooks": false,
+        "mcp_servers": false,
+        "lsp_servers": false
+      },
+      "risk": "low",
+      "raw": "example-plugin@example-marketplace"
+    }
+  ]
+}

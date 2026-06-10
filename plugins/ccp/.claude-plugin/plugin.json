@@ -1,0 +1,20 @@
+{
+  "name": "ccp",
+  "displayName": "Change Claude Profile",
+  "description": "Change Claude Profile — handoff, takeover, and plugin synchronization between Claude Code profiles (claude-team <-> claude-max). Never copies credentials, OAuth tokens, or plugin cache.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Jairo Escobar"
+  },
+  "homepage": "https://github.com/codecraftersautomation/claude-code",
+  "repository": "https://github.com/codecraftersautomation/claude-code",
+  "license": "MIT",
+  "keywords": [
+    "profile",
+    "handoff",
+    "takeover",
+    "plugin-sync",
+    "workflow"
+  ],
+  "defaultEnabled": true
+}
